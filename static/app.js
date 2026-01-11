@@ -180,10 +180,10 @@ function renderHoldings(holdings) {
                 <div class="holding-detail">
                     <span class="label">Return</span>
                     <span class="value ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${h.profit_loss_pct}%</span>
-                </div>
             </div>
             <div class="holding-actions">
                 <button class="holding-action-btn edit" onclick="editHolding('${h.id}')">Edit</button>
+                <button class="holding-action-btn delete" onclick="deleteHolding('${h.id}')">Delete</button>
                 <button class="holding-action-btn sell" onclick="openSellModal('${h.id}')">Sell</button>
             </div>
         </div>
@@ -258,6 +258,40 @@ function openSellModal(id) {
 
 function closeSellModal() {
     elements.sellModalOverlay.classList.remove('active');
+}
+
+// Delete holding (without sell)
+async function deleteHolding(id) {
+    const holding = portfolioData.holdings.find(h => h.id === id);
+    if (!holding) return;
+
+    if (!confirm(`Delete ${holding.weight}g gold (${holding.notes || 'Gold'})?\n\nThis will remove it from your portfolio without recording a sale.`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/portfolio/holdings/${id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}) // No sell price = delete
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast('Holding deleted!');
+            fetchPortfolio();
+        } else {
+            showToast(data.error || 'Failed to delete', 'error');
+        }
+    } catch (e) {
+        showToast('Network error', 'error');
+    }
+}
+
+// Export portfolio to CSV
+function exportPortfolio() {
+    window.location.href = `${API_BASE}/api/portfolio/export`;
+    showToast('Downloading CSV...');
 }
 
 // Weight preset buttons

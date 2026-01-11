@@ -3,7 +3,7 @@ Gold Portfolio Tracker - Backend API
 Fetches gold prices from Galeri24.co.id and manages portfolio
 """
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
@@ -14,12 +14,14 @@ import json
 import os
 import csv
 import io
+import database as db
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-# Data file for portfolio persistence
-PORTFOLIO_FILE = 'portfolio.json'
+# Try to migrate from JSON if it exists
+if os.path.exists('portfolio.json'):
+    db.migrate_from_json('portfolio.json')
 
 def clean_price(price_str):
     """Clean price string like 'Rp1.041.000' -> Decimal('1041000')"""
@@ -93,16 +95,13 @@ def get_gold_prices():
         }
 
 def load_portfolio():
-    """Load portfolio from JSON file"""
-    if os.path.exists(PORTFOLIO_FILE):
-        with open(PORTFOLIO_FILE, 'r') as f:
-            return json.load(f)
-    return {"holdings": [], "transactions": []}
+    """Load portfolio from database"""
+    return db.load_portfolio()
 
 def save_portfolio(portfolio):
-    """Save portfolio to JSON file"""
-    with open(PORTFOLIO_FILE, 'w') as f:
-        json.dump(portfolio, f, indent=2)
+    """Save portfolio - now handled by database module"""
+    # This is now handled by individual save operations
+    pass
 
 # ============== API ROUTES ==============
 
@@ -130,7 +129,6 @@ def api_get_portfolio():
 def api_add_holding():
     """Add a new gold holding"""
     data = request.json
-    portfolio = load_portfolio()
     
     holding = {
         "id": datetime.now().strftime('%Y%m%d%H%M%S%f'),
@@ -141,10 +139,11 @@ def api_add_holding():
         "created_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
     }
     
-    portfolio["holdings"].append(holding)
+    # Save to database
+    db.save_holding(holding)
     
     # Add transaction record
-    portfolio["transactions"].append({
+    db.save_transaction({
         "type": "BUY",
         "holding_id": holding["id"],
         "weight": holding["weight"],
@@ -153,34 +152,20 @@ def api_add_holding():
         "timestamp": holding["created_at"]
     })
     
-    save_portfolio(portfolio)
     return jsonify({"success": True, "data": holding})
 
 @app.route('/api/portfolio/holdings/<holding_id>', methods=['DELETE'])
 def api_delete_holding(holding_id):
-    """Delete a gold holding (sell)"""
+    """Delete a gold holding (sell or delete)"""
     data = request.json or {}
-    portfolio = load_portfolio()
+    sell_price = data.get('sell_price', 0)
     
-    # Find and remove the holding
-    holding_to_remove = None
-    for i, h in enumerate(portfolio["holdings"]):
-        if h["id"] == holding_id:
-            holding_to_remove = portfolio["holdings"].pop(i)
-            break
+    # Delete from database
+    deleted = db.delete_holding(holding_id, record_transaction=True, sell_price=sell_price)
     
-    if holding_to_remove:
-        # Add sell transaction
-        portfolio["transactions"].append({
-            "type": "SELL",
-            "holding_id": holding_id,
-            "weight": holding_to_remove["weight"],
-            "price": data.get('sell_price', 0),
-            "date": datetime.now(ZoneInfo("Asia/Jakarta")).strftime('%Y-%m-%d'),
-            "timestamp": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
-        })
-        save_portfolio(portfolio)
-        return jsonify({"success": True, "message": "Holding sold successfully"})
+    if deleted:
+        msg = "Holding sold successfully" if sell_price > 0 else "Holding deleted successfully"
+        return jsonify({"success": True, "message": msg})
     
     return jsonify({"success": False, "error": "Holding not found"}), 404
 
@@ -188,18 +173,32 @@ def api_delete_holding(holding_id):
 def api_update_holding(holding_id):
     """Update a gold holding"""
     data = request.json
-    portfolio = load_portfolio()
     
-    for h in portfolio["holdings"]:
-        if h["id"] == holding_id:
-            h["weight"] = float(data.get('weight', h["weight"]))
-            h["purchase_price"] = float(data.get('purchase_price', h["purchase_price"]))
-            h["purchase_date"] = data.get('purchase_date', h["purchase_date"])
-            h["notes"] = data.get('notes', h.get("notes", ""))
-            save_portfolio(portfolio)
-            return jsonify({"success": True, "data": h})
+    updates = {
+        "weight": float(data.get('weight', 0)),
+        "purchase_price": float(data.get('purchase_price', 0)),
+        "purchase_date": data.get('purchase_date', ''),
+        "notes": data.get('notes', '')
+    }
+    # Remove empty values
+    updates = {k: v for k, v in updates.items() if v}
+    
+    updated = db.update_holding(holding_id, updates)
+    
+    if updated:
+        return jsonify({"success": True, "data": updated})
     
     return jsonify({"success": False, "error": "Holding not found"}), 404
+
+@app.route('/api/portfolio/export', methods=['GET'])
+def api_export_portfolio():
+    """Export portfolio to CSV"""
+    csv_data = db.export_to_csv()
+    return Response(
+        csv_data,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment;filename=gold_portfolio.csv'}
+    )
 
 @app.route('/api/portfolio/import', methods=['POST'])
 def api_import_holdings():
@@ -212,7 +211,6 @@ def api_import_holdings():
         return jsonify({"success": False, "error": "No file selected"}), 400
     
     filename = file.filename.lower()
-    portfolio = load_portfolio()
     imported_count = 0
     errors = []
     
@@ -310,8 +308,9 @@ def api_import_holdings():
                         "created_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
                     }
                     
-                    portfolio["holdings"].append(holding)
-                    portfolio["transactions"].append({
+                    # Save to database
+                    db.save_holding(holding)
+                    db.save_transaction({
                         "type": "BUY",
                         "holding_id": holding["id"],
                         "weight": holding["weight"],
@@ -323,8 +322,6 @@ def api_import_holdings():
                     
             except Exception as e:
                 errors.append(f"Row {i+2}: {str(e)}")
-        
-        save_portfolio(portfolio)
         
         return jsonify({
             "success": True,
