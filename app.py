@@ -240,9 +240,10 @@ def api_import_holdings():
         
         # Column name mappings (flexible matching)
         weight_cols = ['weight', 'berat', 'gram', 'gr']
-        price_cols = ['purchase_price', 'price', 'harga', 'harga_beli', 'cost']
-        date_cols = ['purchase_date', 'date', 'tanggal', 'tanggal_beli']
+        price_cols = ['purchase price', 'purchase_price', 'price', 'harga', 'harga_beli', 'cost', 'total purchase cost', 'total_purchase_cost']
+        date_cols = ['purchase date', 'purchase_date', 'date', 'tanggal', 'tanggal_beli']
         notes_cols = ['notes', 'note', 'catatan', 'keterangan', 'type', 'jenis']
+        quantity_cols = ['quantity', 'qty', 'jumlah']
         
         def find_value(row, col_names):
             row_lower = {k.lower().strip(): v for k, v in row.items() if k}
@@ -257,6 +258,7 @@ def api_import_holdings():
                 price = find_value(row, price_cols)
                 date = find_value(row, date_cols)
                 notes = find_value(row, notes_cols) or ''
+                quantity = find_value(row, quantity_cols)
                 
                 if not weight or not price:
                     errors.append(f"Row {i+2}: Missing weight or price")
@@ -266,9 +268,27 @@ def api_import_holdings():
                 weight_str = str(weight).lower().replace('g', '').replace('r', '').replace('a', '').replace('m', '').strip()
                 weight_val = float(weight_str)
                 
-                # Clean price (remove 'Rp', '.', ',')
-                price_str = str(price).replace('Rp', '').replace('.', '').replace(',', '').strip()
-                price_val = float(price_str)
+                # Clean price (remove 'Rp', '.', ',', quotes, spaces)
+                price_str = str(price).replace('Rp', '').replace('"', '').replace("'", '').strip()
+                # Handle both formats: "Rp42,118,275" and "42.118.275"
+                if ',' in price_str and '.' not in price_str:
+                    # Comma as thousands separator: "42,118,275"
+                    price_str = price_str.replace(',', '')
+                elif '.' in price_str and ',' not in price_str:
+                    # Dot as thousands separator: "42.118.275"
+                    price_str = price_str.replace('.', '')
+                else:
+                    # Both present, assume comma is thousands: "42,118.00" or just clean all
+                    price_str = price_str.replace(',', '').replace('.', '')
+                price_val = float(price_str) if price_str else 0
+                
+                # Parse quantity (default 1)
+                quantity_val = 1
+                if quantity:
+                    try:
+                        quantity_val = int(float(str(quantity)))
+                    except:
+                        quantity_val = 1
                 
                 # Parse date
                 if date:
@@ -279,26 +299,28 @@ def api_import_holdings():
                 else:
                     date_str = datetime.now(ZoneInfo("Asia/Jakarta")).strftime('%Y-%m-%d')
                 
-                holding = {
-                    "id": datetime.now().strftime('%Y%m%d%H%M%S%f') + str(i),
-                    "weight": weight_val,
-                    "purchase_price": price_val,
-                    "purchase_date": date_str,
-                    "notes": str(notes),
-                    "created_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
-                }
-                
-                portfolio["holdings"].append(holding)
-                portfolio["transactions"].append({
-                    "type": "BUY",
-                    "holding_id": holding["id"],
-                    "weight": holding["weight"],
-                    "price": holding["purchase_price"],
-                    "date": holding["purchase_date"],
-                    "timestamp": holding["created_at"]
-                })
-                imported_count += 1
-                
+                # Create holdings for each quantity
+                for q in range(quantity_val):
+                    holding = {
+                        "id": datetime.now().strftime('%Y%m%d%H%M%S%f') + str(i) + str(q),
+                        "weight": weight_val,
+                        "purchase_price": price_val,
+                        "purchase_date": date_str,
+                        "notes": str(notes) if notes else f"{weight_val}g",
+                        "created_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
+                    }
+                    
+                    portfolio["holdings"].append(holding)
+                    portfolio["transactions"].append({
+                        "type": "BUY",
+                        "holding_id": holding["id"],
+                        "weight": holding["weight"],
+                        "price": holding["purchase_price"],
+                        "date": holding["purchase_date"],
+                        "timestamp": holding["created_at"]
+                    })
+                    imported_count += 1
+                    
             except Exception as e:
                 errors.append(f"Row {i+2}: {str(e)}")
         
