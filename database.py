@@ -1,21 +1,56 @@
 """
 Database module for Gold Portfolio Tracker
-Uses SQLite for persistent storage
+Supports both local SQLite and Turso cloud database
 """
 
-import sqlite3
 import os
 import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-DATABASE_FILE = os.environ.get('DATABASE_FILE', 'goldtracker.db')
+# Try to import libsql for Turso support, fallback to sqlite3
+try:
+    import libsql_experimental as libsql
+    USING_LIBSQL = True
+except ImportError:
+    try:
+        import libsql
+        USING_LIBSQL = True
+    except ImportError:
+        import sqlite3 as libsql
+        USING_LIBSQL = False
+
+# Database configuration
+TURSO_DATABASE_URL = os.environ.get('TURSO_DATABASE_URL')
+TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN')
+LOCAL_DATABASE_FILE = os.environ.get('DATABASE_FILE', 'goldtracker.db')
 
 def get_db():
-    """Get database connection"""
-    conn = sqlite3.connect(DATABASE_FILE)
-    conn.row_factory = sqlite3.Row
+    """Get database connection - Turso cloud or local SQLite"""
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        # Connect to Turso cloud with local replica for speed
+        conn = libsql.connect(
+            LOCAL_DATABASE_FILE,
+            sync_url=TURSO_DATABASE_URL,
+            auth_token=TURSO_AUTH_TOKEN
+        )
+        conn.sync()
+    else:
+        # Local SQLite fallback
+        conn = libsql.connect(LOCAL_DATABASE_FILE)
+    
+    # Enable row factory for dict-like access
+    if hasattr(conn, 'row_factory'):
+        conn.row_factory = libsql.Row if hasattr(libsql, 'Row') else None
+    
     return conn
+
+def sync_db():
+    """Sync local replica with Turso cloud"""
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        conn = get_db()
+        conn.sync()
+        conn.close()
 
 def init_db():
     """Initialize database tables"""
@@ -48,10 +83,15 @@ def init_db():
     ''')
     
     conn.commit()
+    
+    # Sync to cloud if using Turso
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        conn.sync()
+    
     conn.close()
 
 def migrate_from_json(json_file='portfolio.json'):
-    """Migrate existing JSON data to SQLite"""
+    """Migrate existing JSON data to database"""
     if not os.path.exists(json_file):
         return False
     
@@ -78,6 +118,11 @@ def migrate_from_json(json_file='portfolio.json'):
             ''', (t['type'], t['holding_id'], t['weight'], t['price'], t['date'], t['timestamp']))
         
         conn.commit()
+        
+        # Sync to cloud
+        if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+            conn.sync()
+        
         conn.close()
         
         # Rename old JSON file as backup
@@ -87,18 +132,28 @@ def migrate_from_json(json_file='portfolio.json'):
         print(f"Migration error: {e}")
         return False
 
+def _row_to_dict(row, columns):
+    """Convert a database row to dictionary"""
+    if row is None:
+        return None
+    if hasattr(row, 'keys'):
+        return dict(row)
+    return {columns[i]: row[i] for i in range(len(columns))}
+
 def load_portfolio():
     """Load portfolio from database"""
     conn = get_db()
     cursor = conn.cursor()
     
     # Get holdings
-    cursor.execute('SELECT * FROM holdings ORDER BY purchase_date DESC')
-    holdings = [dict(row) for row in cursor.fetchall()]
+    cursor.execute('SELECT id, weight, purchase_price, purchase_date, notes, created_at FROM holdings ORDER BY purchase_date DESC')
+    holdings_cols = ['id', 'weight', 'purchase_price', 'purchase_date', 'notes', 'created_at']
+    holdings = [_row_to_dict(row, holdings_cols) for row in cursor.fetchall()]
     
     # Get transactions
-    cursor.execute('SELECT * FROM transactions ORDER BY id DESC')
-    transactions = [dict(row) for row in cursor.fetchall()]
+    cursor.execute('SELECT id, type, holding_id, weight, price, date, timestamp FROM transactions ORDER BY id DESC')
+    tx_cols = ['id', 'type', 'holding_id', 'weight', 'price', 'date', 'timestamp']
+    transactions = [_row_to_dict(row, tx_cols) for row in cursor.fetchall()]
     
     conn.close()
     return {"holdings": holdings, "transactions": transactions}
@@ -115,6 +170,10 @@ def save_holding(holding):
           holding['purchase_date'], holding.get('notes', ''), holding['created_at']))
     
     conn.commit()
+    
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        conn.sync()
+    
     conn.close()
 
 def save_transaction(transaction):
@@ -129,6 +188,10 @@ def save_transaction(transaction):
           transaction['price'], transaction['date'], transaction['timestamp']))
     
     conn.commit()
+    
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        conn.sync()
+    
     conn.close()
 
 def update_holding(holding_id, updates):
@@ -142,13 +205,19 @@ def update_holding(holding_id, updates):
     cursor.execute(f'UPDATE holdings SET {set_clause} WHERE id = ?', values)
     
     # Get updated holding
-    cursor.execute('SELECT * FROM holdings WHERE id = ?', (holding_id,))
+    cursor.execute('SELECT id, weight, purchase_price, purchase_date, notes, created_at FROM holdings WHERE id = ?', (holding_id,))
     row = cursor.fetchone()
     
     conn.commit()
+    
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        conn.sync()
+    
     conn.close()
     
-    return dict(row) if row else None
+    if row:
+        return _row_to_dict(row, ['id', 'weight', 'purchase_price', 'purchase_date', 'notes', 'created_at'])
+    return None
 
 def delete_holding(holding_id, record_transaction=True, sell_price=0):
     """Delete a holding from database"""
@@ -156,14 +225,14 @@ def delete_holding(holding_id, record_transaction=True, sell_price=0):
     cursor = conn.cursor()
     
     # Get holding first
-    cursor.execute('SELECT * FROM holdings WHERE id = ?', (holding_id,))
+    cursor.execute('SELECT id, weight, purchase_price, purchase_date, notes, created_at FROM holdings WHERE id = ?', (holding_id,))
     row = cursor.fetchone()
     
     if not row:
         conn.close()
         return None
     
-    holding = dict(row)
+    holding = _row_to_dict(row, ['id', 'weight', 'purchase_price', 'purchase_date', 'notes', 'created_at'])
     
     # Delete holding
     cursor.execute('DELETE FROM holdings WHERE id = ?', (holding_id,))
@@ -178,6 +247,10 @@ def delete_holding(holding_id, record_transaction=True, sell_price=0):
               sell_price, datetime.now(tz).strftime('%Y-%m-%d'), datetime.now(tz).isoformat()))
     
     conn.commit()
+    
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        conn.sync()
+    
     conn.close()
     
     return holding
@@ -186,16 +259,18 @@ def get_holding(holding_id):
     """Get a single holding by ID"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM holdings WHERE id = ?', (holding_id,))
+    cursor.execute('SELECT id, weight, purchase_price, purchase_date, notes, created_at FROM holdings WHERE id = ?', (holding_id,))
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    if row:
+        return _row_to_dict(row, ['id', 'weight', 'purchase_price', 'purchase_date', 'notes', 'created_at'])
+    return None
 
 def export_to_csv():
     """Export all holdings to CSV format"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM holdings ORDER BY purchase_date')
+    cursor.execute('SELECT id, weight, purchase_price, purchase_date, notes, created_at FROM holdings ORDER BY purchase_date')
     holdings = cursor.fetchall()
     conn.close()
     
@@ -210,7 +285,8 @@ def export_to_csv():
     
     # Data rows
     for h in holdings:
-        writer.writerow([h['purchase_date'], h['weight'], 1, h['purchase_price'], h['notes']])
+        row = _row_to_dict(h, ['id', 'weight', 'purchase_price', 'purchase_date', 'notes', 'created_at'])
+        writer.writerow([row['purchase_date'], row['weight'], 1, row['purchase_price'], row['notes']])
     
     return output.getvalue()
 
@@ -221,6 +297,10 @@ def clear_all_data():
     cursor.execute('DELETE FROM holdings')
     cursor.execute('DELETE FROM transactions')
     conn.commit()
+    
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        conn.sync()
+    
     conn.close()
 
 # Initialize database on module load
