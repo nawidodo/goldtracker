@@ -36,7 +36,18 @@ const elements = {
     sellInfo: document.getElementById('sellInfo'),
     sellModalClose: document.getElementById('sellModalClose'),
     cancelSellBtn: document.getElementById('cancelSellBtn'),
-    toastContainer: document.getElementById('toastContainer')
+    toastContainer: document.getElementById('toastContainer'),
+    // Import elements
+    fabImport: document.getElementById('fabImport'),
+    importModalOverlay: document.getElementById('importModalOverlay'),
+    importModalClose: document.getElementById('importModalClose'),
+    importFile: document.getElementById('importFile'),
+    fileUploadArea: document.getElementById('fileUploadArea'),
+    selectedFile: document.getElementById('selectedFile'),
+    fileName: document.getElementById('fileName'),
+    removeFile: document.getElementById('removeFile'),
+    cancelImportBtn: document.getElementById('cancelImportBtn'),
+    submitImportBtn: document.getElementById('submitImportBtn')
 };
 
 // Format currency
@@ -350,6 +361,79 @@ elements.cancelSellBtn.addEventListener('click', closeSellModal);
 elements.modalOverlay.addEventListener('click', (e) => { if (e.target === elements.modalOverlay) closeModal(); });
 elements.sellModalOverlay.addEventListener('click', (e) => { if (e.target === elements.sellModalOverlay) closeSellModal(); });
 
+// Import functionality
+function openImportModal() {
+    elements.importModalOverlay.classList.add('active');
+    resetImportForm();
+}
+
+function closeImportModal() {
+    elements.importModalOverlay.classList.remove('active');
+    resetImportForm();
+}
+
+function resetImportForm() {
+    elements.importFile.value = '';
+    elements.selectedFile.style.display = 'none';
+    elements.fileUploadArea.style.display = 'flex';
+    elements.submitImportBtn.disabled = true;
+}
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) {
+        elements.fileName.textContent = file.name;
+        elements.selectedFile.style.display = 'flex';
+        elements.fileUploadArea.style.display = 'none';
+        elements.submitImportBtn.disabled = false;
+    }
+}
+
+async function handleImport() {
+    const file = elements.importFile.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    elements.submitImportBtn.disabled = true;
+    elements.submitImportBtn.textContent = 'Importing...';
+
+    try {
+        const res = await fetch(`${API_BASE}/api/portfolio/import`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Imported ${data.imported} holdings!`);
+            if (data.errors && data.errors.length > 0) {
+                console.warn('Import errors:', data.errors);
+            }
+            closeImportModal();
+            fetchPortfolio();
+        } else {
+            showToast(data.error || 'Import failed', 'error');
+        }
+    } catch (e) {
+        showToast('Network error', 'error');
+    }
+
+    elements.submitImportBtn.disabled = false;
+    elements.submitImportBtn.textContent = 'Import';
+}
+
+elements.fabImport.addEventListener('click', openImportModal);
+elements.importModalClose.addEventListener('click', closeImportModal);
+elements.cancelImportBtn.addEventListener('click', closeImportModal);
+elements.fileUploadArea.addEventListener('click', () => elements.importFile.click());
+elements.importFile.addEventListener('change', handleFileSelect);
+elements.removeFile.addEventListener('click', resetImportForm);
+elements.submitImportBtn.addEventListener('click', handleImport);
+elements.importModalOverlay.addEventListener('click', (e) => { if (e.target === elements.importModalOverlay) closeImportModal(); });
+
 // Initial load
 fetchPrices();
 fetchPortfolio();
+

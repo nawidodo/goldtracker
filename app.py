@@ -12,6 +12,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import json
 import os
+import csv
+import io
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
@@ -198,6 +200,118 @@ def api_update_holding(holding_id):
             return jsonify({"success": True, "data": h})
     
     return jsonify({"success": False, "error": "Holding not found"}), 404
+
+@app.route('/api/portfolio/import', methods=['POST'])
+def api_import_holdings():
+    """Import holdings from CSV or Excel file"""
+    if 'file' not in request.files:
+        return jsonify({"success": False, "error": "No file uploaded"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "error": "No file selected"}), 400
+    
+    filename = file.filename.lower()
+    portfolio = load_portfolio()
+    imported_count = 0
+    errors = []
+    
+    try:
+        if filename.endswith('.csv'):
+            # Parse CSV
+            content = file.read().decode('utf-8')
+            reader = csv.DictReader(io.StringIO(content))
+            rows = list(reader)
+        elif filename.endswith(('.xlsx', '.xls')):
+            # Parse Excel
+            try:
+                from openpyxl import load_workbook
+                wb = load_workbook(file)
+                ws = wb.active
+                headers = [cell.value.lower().strip() if cell.value else '' for cell in ws[1]]
+                rows = []
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    row_dict = {headers[i]: row[i] for i in range(len(headers)) if i < len(row)}
+                    rows.append(row_dict)
+            except ImportError:
+                return jsonify({"success": False, "error": "Excel support not installed"}), 400
+        else:
+            return jsonify({"success": False, "error": "Unsupported file format. Use CSV or Excel (.xlsx)"}), 400
+        
+        # Column name mappings (flexible matching)
+        weight_cols = ['weight', 'berat', 'gram', 'gr']
+        price_cols = ['purchase_price', 'price', 'harga', 'harga_beli', 'cost']
+        date_cols = ['purchase_date', 'date', 'tanggal', 'tanggal_beli']
+        notes_cols = ['notes', 'note', 'catatan', 'keterangan', 'type', 'jenis']
+        
+        def find_value(row, col_names):
+            row_lower = {k.lower().strip(): v for k, v in row.items() if k}
+            for col in col_names:
+                if col in row_lower and row_lower[col] is not None:
+                    return row_lower[col]
+            return None
+        
+        for i, row in enumerate(rows):
+            try:
+                weight = find_value(row, weight_cols)
+                price = find_value(row, price_cols)
+                date = find_value(row, date_cols)
+                notes = find_value(row, notes_cols) or ''
+                
+                if not weight or not price:
+                    errors.append(f"Row {i+2}: Missing weight or price")
+                    continue
+                
+                # Clean weight (remove 'g', 'gr', 'gram')
+                weight_str = str(weight).lower().replace('g', '').replace('r', '').replace('a', '').replace('m', '').strip()
+                weight_val = float(weight_str)
+                
+                # Clean price (remove 'Rp', '.', ',')
+                price_str = str(price).replace('Rp', '').replace('.', '').replace(',', '').strip()
+                price_val = float(price_str)
+                
+                # Parse date
+                if date:
+                    if hasattr(date, 'strftime'):
+                        date_str = date.strftime('%Y-%m-%d')
+                    else:
+                        date_str = str(date)[:10]
+                else:
+                    date_str = datetime.now(ZoneInfo("Asia/Jakarta")).strftime('%Y-%m-%d')
+                
+                holding = {
+                    "id": datetime.now().strftime('%Y%m%d%H%M%S%f') + str(i),
+                    "weight": weight_val,
+                    "purchase_price": price_val,
+                    "purchase_date": date_str,
+                    "notes": str(notes),
+                    "created_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
+                }
+                
+                portfolio["holdings"].append(holding)
+                portfolio["transactions"].append({
+                    "type": "BUY",
+                    "holding_id": holding["id"],
+                    "weight": holding["weight"],
+                    "price": holding["purchase_price"],
+                    "date": holding["purchase_date"],
+                    "timestamp": holding["created_at"]
+                })
+                imported_count += 1
+                
+            except Exception as e:
+                errors.append(f"Row {i+2}: {str(e)}")
+        
+        save_portfolio(portfolio)
+        
+        return jsonify({
+            "success": True,
+            "imported": imported_count,
+            "errors": errors[:10]  # Limit errors shown
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/portfolio/summary', methods=['GET'])
 def api_portfolio_summary():
