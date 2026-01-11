@@ -180,6 +180,7 @@ function renderHoldings(holdings) {
                 <div class="holding-detail">
                     <span class="label">Return</span>
                     <span class="value ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${h.profit_loss_pct}%</span>
+                </div>
             </div>
             <div class="holding-actions">
                 <button class="holding-action-btn edit" onclick="editHolding('${h.id}')">Edit</button>
