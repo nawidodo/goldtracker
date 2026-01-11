@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Track your gold portfolio with real-time Galeri24 prices. Beautiful mobile-first gold investment tracker.">
+    
+    <title>Gold Portfolio Tracker</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪙</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">🪙</span>
+                    <div class="logo-text">
+                        <h1>Gold Tracker</h1>
+                        <span class="subtitle">Portfolio Management</span>
+                    </div>
+                </div>
+                <button class="refresh-btn" id="refreshBtn" title="Refresh Prices">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/>
+                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                        <path d="M16 16h5v5"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="last-update" id="lastUpdate">Loading prices...</div>
+        </header>
+
+        <!-- Portfolio Summary Cards -->
+        <section class="summary-section">
+            <div class="summary-card main-card">
+                <div class="summary-label">Total Portfolio Value</div>
+                <div class="summary-value" id="totalValue">Rp 0</div>
+                <div class="summary-change" id="totalChange">
+                    <span class="change-value">+Rp 0</span>
+                    <span class="change-percent">(0%)</span>
+                </div>
+            </div>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-icon">⚖️</div>
+                    <div class="summary-details">
+                        <span class="summary-label">Total Weight</span>
+                        <span class="summary-value" id="totalWeight">0 gr</span>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-icon">💰</div>
+                    <div class="summary-details">
+                        <span class="summary-label">Total Cost</span>
+                        <span class="summary-value" id="totalCost">Rp 0</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="holdings">
+                <span class="tab-icon">📦</span>
+                <span class="tab-text">Holdings</span>
+            </button>
+            <button class="tab-btn" data-tab="prices">
+                <span class="tab-icon">📊</span>
+                <span class="tab-text">Prices</span>
+            </button>
+            <button class="tab-btn" data-tab="history">
+                <span class="tab-icon">📜</span>
+                <span class="tab-text">History</span>
+            </button>
+        </nav>
+
+        <!-- Tab Content -->
+        <main class="main-content">
+            <!-- Holdings Tab -->
+            <div class="tab-content active" id="holdings-tab">
+                <div class="holdings-list" id="holdingsList">
+                    <div class="empty-state">
+                        <span class="empty-icon">🪙</span>
+                        <p>No gold holdings yet</p>
+                        <span class="empty-hint">Tap + to add your first gold</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prices Tab -->
+            <div class="tab-content" id="prices-tab">
+                <div class="prices-list" id="pricesList">
+                    <div class="loading-state">
+                        <div class="spinner"></div>
+                        <p>Loading prices...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-content" id="history-tab">
+                <div class="history-list" id="historyList">
+                    <div class="empty-state">
+                        <span class="empty-icon">📜</span>
+                        <p>No transactions yet</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- FAB Add Button -->
+        <button class="fab" id="fabAdd" title="Add Gold">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="addModal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add Gold</h2>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <form class="modal-form" id="holdingForm">
+                <input type="hidden" id="holdingId">
+                
+                <div class="form-group">
+                    <label for="weight">Weight (gram)</label>
+                    <div class="weight-selector">
+                        <div class="weight-presets" id="weightPresets">
+                            <button type="button" class="weight-btn" data-weight="0.5">0.5g</button>
+                            <button type="button" class="weight-btn" data-weight="1">1g</button>
+                            <button type="button" class="weight-btn" data-weight="2">2g</button>
+                            <button type="button" class="weight-btn" data-weight="5">5g</button>
+                            <button type="button" class="weight-btn" data-weight="10">10g</button>
+                            <button type="button" class="weight-btn" data-weight="25">25g</button>
+                            <button type="button" class="weight-btn" data-weight="50">50g</button>
+                            <button type="button" class="weight-btn" data-weight="100">100g</button>
+                        </div>
+                        <input type="number" id="weight" step="0.01" min="0.01" required placeholder="Or enter custom weight">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="purchasePrice">Purchase Price (Rp)</label>
+                    <input type="number" id="purchasePrice" required placeholder="e.g., 1500000">
+                    <div class="price-suggestion" id="priceSuggestion"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="purchaseDate">Purchase Date</label>
+                    <input type="date" id="purchaseDate" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">Notes (optional)</label>
+                    <input type="text" id="notes" placeholder="e.g., Antam, UBS, etc.">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Add Gold</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sell Confirmation Modal -->
+    <div class="modal-overlay" id="sellModalOverlay">
+        <div class="modal sell-modal" id="sellModal">
+            <div class="modal-header">
+                <h2>Sell Gold</h2>
+                <button class="modal-close" id="sellModalClose">&times;</button>
+            </div>
+            <div class="sell-info">
+                <p id="sellInfo"></p>
+            </div>
+            <form class="modal-form" id="sellForm">
+                <input type="hidden" id="sellHoldingId">
+                <div class="form-group">
+                    <label for="sellPrice">Sell Price (Rp)</label>
+                    <input type="number" id="sellPrice" required placeholder="Enter sell price">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelSellBtn">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Confirm Sell</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

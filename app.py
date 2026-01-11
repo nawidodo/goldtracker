@@ -1,0 +1,273 @@
+"""
+Gold Portfolio Tracker - Backend API
+Fetches gold prices from Galeri24.co.id and manages portfolio
+"""
+
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
+import requests
+from bs4 import BeautifulSoup
+from decimal import Decimal
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import json
+import os
+
+app = Flask(__name__, static_folder='static')
+CORS(app)
+
+# Data file for portfolio persistence
+PORTFOLIO_FILE = 'portfolio.json'
+
+def clean_price(price_str):
+    """Clean price string like 'Rp1.041.000' -> Decimal('1041000')"""
+    price_str = price_str.replace("Rp", "").replace(".", "").replace(",", "").strip()
+    return Decimal(price_str)
+
+def decimal_to_float(obj):
+    """Convert Decimal to float for JSON serialization"""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    raise TypeError
+
+def get_gold_prices():
+    """Fetch current gold prices from Galeri24.co.id"""
+    url = "https://galeri24.co.id/harga-emas"
+    
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        galeri24_div = soup.find("div", {"id": "GALERI 24"})
+        
+        if not galeri24_div:
+            return None
+            
+        main_container = galeri24_div.find("div", class_="grid divide-neutral-200 border-neutral-200")
+        
+        if not main_container:
+            return None
+            
+        rows = main_container.find_all("div", class_="grid grid-cols-5 divide-x lg:hover:bg-neutral-50 transition-all")
+        
+        gold_prices = {}
+        
+        for row in rows:
+            cols = row.find_all("div", class_="p-3 col-span-1 whitespace-nowrap w-fit") + \
+                   row.find_all("div", class_="p-3 col-span-2 whitespace-nowrap w-fit")
+            cols_text = [col.get_text(strip=True) for col in cols]
+            
+            if len(cols_text) == 3:
+                weight = float(cols_text[0])
+                sell_price = float(clean_price(cols_text[1]))
+                buy_price = float(clean_price(cols_text[2]))
+                spread_pct = ((sell_price - buy_price) / buy_price * 100) if buy_price else 0
+                
+                gold_prices[str(weight)] = {
+                    "weight": weight,
+                    "sell": sell_price,
+                    "buy": buy_price,
+                    "spread_pct": round(spread_pct, 2)
+                }
+        
+        tz = ZoneInfo("Asia/Jakarta")
+        last_update = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
+        
+        return {
+            "success": True,
+            "last_update": last_update,
+            "timezone": "Asia/Jakarta (GMT+7)",
+            "data": gold_prices
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def load_portfolio():
+    """Load portfolio from JSON file"""
+    if os.path.exists(PORTFOLIO_FILE):
+        with open(PORTFOLIO_FILE, 'r') as f:
+            return json.load(f)
+    return {"holdings": [], "transactions": []}
+
+def save_portfolio(portfolio):
+    """Save portfolio to JSON file"""
+    with open(PORTFOLIO_FILE, 'w') as f:
+        json.dump(portfolio, f, indent=2)
+
+# ============== API ROUTES ==============
+
+@app.route('/')
+def serve_index():
+    return send_from_directory('static', 'index.html')
+
+@app.route('/static/<path:path>')
+def serve_static(path):
+    return send_from_directory('static', path)
+
+@app.route('/api/prices', methods=['GET'])
+def api_get_prices():
+    """Get current gold prices"""
+    prices = get_gold_prices()
+    return jsonify(prices)
+
+@app.route('/api/portfolio', methods=['GET'])
+def api_get_portfolio():
+    """Get user's portfolio"""
+    portfolio = load_portfolio()
+    return jsonify({"success": True, "data": portfolio})
+
+@app.route('/api/portfolio/holdings', methods=['POST'])
+def api_add_holding():
+    """Add a new gold holding"""
+    data = request.json
+    portfolio = load_portfolio()
+    
+    holding = {
+        "id": datetime.now().strftime('%Y%m%d%H%M%S%f'),
+        "weight": float(data.get('weight', 0)),
+        "purchase_price": float(data.get('purchase_price', 0)),
+        "purchase_date": data.get('purchase_date', datetime.now().strftime('%Y-%m-%d')),
+        "notes": data.get('notes', ''),
+        "created_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
+    }
+    
+    portfolio["holdings"].append(holding)
+    
+    # Add transaction record
+    portfolio["transactions"].append({
+        "type": "BUY",
+        "holding_id": holding["id"],
+        "weight": holding["weight"],
+        "price": holding["purchase_price"],
+        "date": holding["purchase_date"],
+        "timestamp": holding["created_at"]
+    })
+    
+    save_portfolio(portfolio)
+    return jsonify({"success": True, "data": holding})
+
+@app.route('/api/portfolio/holdings/<holding_id>', methods=['DELETE'])
+def api_delete_holding(holding_id):
+    """Delete a gold holding (sell)"""
+    data = request.json or {}
+    portfolio = load_portfolio()
+    
+    # Find and remove the holding
+    holding_to_remove = None
+    for i, h in enumerate(portfolio["holdings"]):
+        if h["id"] == holding_id:
+            holding_to_remove = portfolio["holdings"].pop(i)
+            break
+    
+    if holding_to_remove:
+        # Add sell transaction
+        portfolio["transactions"].append({
+            "type": "SELL",
+            "holding_id": holding_id,
+            "weight": holding_to_remove["weight"],
+            "price": data.get('sell_price', 0),
+            "date": datetime.now(ZoneInfo("Asia/Jakarta")).strftime('%Y-%m-%d'),
+            "timestamp": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
+        })
+        save_portfolio(portfolio)
+        return jsonify({"success": True, "message": "Holding sold successfully"})
+    
+    return jsonify({"success": False, "error": "Holding not found"}), 404
+
+@app.route('/api/portfolio/holdings/<holding_id>', methods=['PUT'])
+def api_update_holding(holding_id):
+    """Update a gold holding"""
+    data = request.json
+    portfolio = load_portfolio()
+    
+    for h in portfolio["holdings"]:
+        if h["id"] == holding_id:
+            h["weight"] = float(data.get('weight', h["weight"]))
+            h["purchase_price"] = float(data.get('purchase_price', h["purchase_price"]))
+            h["purchase_date"] = data.get('purchase_date', h["purchase_date"])
+            h["notes"] = data.get('notes', h.get("notes", ""))
+            save_portfolio(portfolio)
+            return jsonify({"success": True, "data": h})
+    
+    return jsonify({"success": False, "error": "Holding not found"}), 404
+
+@app.route('/api/portfolio/summary', methods=['GET'])
+def api_portfolio_summary():
+    """Get portfolio summary with current valuations"""
+    portfolio = load_portfolio()
+    prices = get_gold_prices()
+    
+    if not prices.get("success"):
+        return jsonify({"success": False, "error": "Could not fetch current prices"})
+    
+    total_weight = 0
+    total_cost = 0
+    total_current_value = 0
+    holdings_with_values = []
+    
+    for holding in portfolio["holdings"]:
+        weight = holding["weight"]
+        cost = holding["purchase_price"]
+        
+        # Find matching price or estimate per gram
+        price_key = str(weight)
+        if price_key in prices["data"]:
+            current_sell = prices["data"][price_key]["sell"]
+            current_buy = prices["data"][price_key]["buy"]
+        else:
+            # Estimate using 1 gram price
+            per_gram = prices["data"].get("1.0", prices["data"].get("1", {}))
+            if per_gram:
+                current_sell = per_gram["sell"] * weight
+                current_buy = per_gram["buy"] * weight
+            else:
+                current_sell = 0
+                current_buy = 0
+        
+        profit_loss = current_buy - cost
+        profit_loss_pct = ((current_buy - cost) / cost * 100) if cost > 0 else 0
+        
+        holdings_with_values.append({
+            **holding,
+            "current_sell": current_sell,
+            "current_buy": current_buy,
+            "profit_loss": profit_loss,
+            "profit_loss_pct": round(profit_loss_pct, 2)
+        })
+        
+        total_weight += weight
+        total_cost += cost
+        total_current_value += current_buy
+    
+    total_profit_loss = total_current_value - total_cost
+    total_profit_loss_pct = ((total_current_value - total_cost) / total_cost * 100) if total_cost > 0 else 0
+    
+    return jsonify({
+        "success": True,
+        "prices_update": prices["last_update"],
+        "summary": {
+            "total_weight": round(total_weight, 2),
+            "total_cost": round(total_cost, 0),
+            "total_current_value": round(total_current_value, 0),
+            "total_profit_loss": round(total_profit_loss, 0),
+            "total_profit_loss_pct": round(total_profit_loss_pct, 2),
+            "holdings_count": len(portfolio["holdings"])
+        },
+        "holdings": holdings_with_values,
+        "transactions": portfolio["transactions"]
+    })
+
+if __name__ == '__main__':
+    # Create static folder if not exists
+    os.makedirs('static', exist_ok=True)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    app.run(debug=debug, host='0.0.0.0', port=port)
