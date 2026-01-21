@@ -25,6 +25,15 @@ TURSO_DATABASE_URL = os.environ.get('TURSO_DATABASE_URL')
 TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN')
 LOCAL_DATABASE_FILE = os.environ.get('DATABASE_FILE', 'goldtracker.db')
 
+def safe_sync(conn):
+    """Safely sync to Turso cloud - don't fail if sync times out"""
+    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
+        try:
+            conn.sync()
+        except Exception as e:
+            print(f"Warning: Turso sync failed (will retry later): {e}")
+            # Don't raise - local database is still updated
+
 def get_db():
     """Get database connection - Turso cloud or local SQLite"""
     if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
@@ -34,7 +43,7 @@ def get_db():
             sync_url=TURSO_DATABASE_URL,
             auth_token=TURSO_AUTH_TOKEN
         )
-        conn.sync()
+        safe_sync(conn)
     else:
         # Local SQLite fallback
         conn = libsql.connect(LOCAL_DATABASE_FILE)
@@ -85,8 +94,7 @@ def init_db():
     conn.commit()
     
     # Sync to cloud if using Turso
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        conn.sync()
+    safe_sync(conn)
     
     conn.close()
 
@@ -120,8 +128,7 @@ def migrate_from_json(json_file='portfolio.json'):
         conn.commit()
         
         # Sync to cloud
-        if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-            conn.sync()
+        safe_sync(conn)
         
         conn.close()
         
@@ -170,10 +177,7 @@ def save_holding(holding):
           holding['purchase_date'], holding.get('notes', ''), holding['created_at']))
     
     conn.commit()
-    
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        conn.sync()
-    
+    safe_sync(conn)
     conn.close()
 
 def save_transaction(transaction):
@@ -188,10 +192,7 @@ def save_transaction(transaction):
           transaction['price'], transaction['date'], transaction['timestamp']))
     
     conn.commit()
-    
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        conn.sync()
-    
+    safe_sync(conn)
     conn.close()
 
 def update_holding(holding_id, updates):
@@ -209,10 +210,7 @@ def update_holding(holding_id, updates):
     row = cursor.fetchone()
     
     conn.commit()
-    
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        conn.sync()
-    
+    safe_sync(conn)
     conn.close()
     
     if row:
@@ -247,10 +245,7 @@ def delete_holding(holding_id, record_transaction=True, sell_price=0):
               sell_price, datetime.now(tz).strftime('%Y-%m-%d'), datetime.now(tz).isoformat()))
     
     conn.commit()
-    
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        conn.sync()
-    
+    safe_sync(conn)
     conn.close()
     
     return holding
@@ -297,10 +292,7 @@ def clear_all_data():
     cursor.execute('DELETE FROM holdings')
     cursor.execute('DELETE FROM transactions')
     conn.commit()
-    
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        conn.sync()
-    
+    safe_sync(conn)
     conn.close()
 
 # Initialize database on module load
