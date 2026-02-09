@@ -25,27 +25,16 @@ TURSO_DATABASE_URL = os.environ.get('TURSO_DATABASE_URL')
 TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN')
 LOCAL_DATABASE_FILE = os.environ.get('DATABASE_FILE', 'goldtracker.db')
 
-def safe_sync(conn):
-    """Safely sync to Turso cloud - don't fail if sync times out"""
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        try:
-            conn.sync()
-        except Exception as e:
-            print(f"Warning: Turso sync failed (will retry later): {e}")
-            # Don't raise - local database is still updated
-
 def get_db():
     """Get database connection - Turso cloud or local SQLite"""
     if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        # Connect to Turso cloud with local replica for speed
+        # Remote-only connection to Turso (no local replica)
         conn = libsql.connect(
-            LOCAL_DATABASE_FILE,
-            sync_url=TURSO_DATABASE_URL,
+            database=TURSO_DATABASE_URL,
             auth_token=TURSO_AUTH_TOKEN
         )
-        safe_sync(conn)
     else:
-        # Local SQLite fallback
+        # Local SQLite for development (when Turso env vars not set)
         conn = libsql.connect(LOCAL_DATABASE_FILE)
     
     # Enable row factory for dict-like access
@@ -53,13 +42,6 @@ def get_db():
         conn.row_factory = libsql.Row if hasattr(libsql, 'Row') else None
     
     return conn
-
-def sync_db():
-    """Sync local replica with Turso cloud"""
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN and USING_LIBSQL:
-        conn = get_db()
-        conn.sync()
-        conn.close()
 
 def init_db():
     """Initialize database tables"""
@@ -92,10 +74,6 @@ def init_db():
     ''')
     
     conn.commit()
-    
-    # Sync to cloud if using Turso
-    safe_sync(conn)
-    
     conn.close()
 
 def migrate_from_json(json_file='portfolio.json'):
@@ -126,10 +104,6 @@ def migrate_from_json(json_file='portfolio.json'):
             ''', (t['type'], t['holding_id'], t['weight'], t['price'], t['date'], t['timestamp']))
         
         conn.commit()
-        
-        # Sync to cloud
-        safe_sync(conn)
-        
         conn.close()
         
         # Rename old JSON file as backup
@@ -177,7 +151,6 @@ def save_holding(holding):
           holding['purchase_date'], holding.get('notes', ''), holding['created_at']))
     
     conn.commit()
-    safe_sync(conn)
     conn.close()
 
 def save_transaction(transaction):
@@ -192,7 +165,6 @@ def save_transaction(transaction):
           transaction['price'], transaction['date'], transaction['timestamp']))
     
     conn.commit()
-    safe_sync(conn)
     conn.close()
 
 def update_holding(holding_id, updates):
@@ -210,7 +182,6 @@ def update_holding(holding_id, updates):
     row = cursor.fetchone()
     
     conn.commit()
-    safe_sync(conn)
     conn.close()
     
     if row:
@@ -245,7 +216,6 @@ def delete_holding(holding_id, record_transaction=True, sell_price=0):
               sell_price, datetime.now(tz).strftime('%Y-%m-%d'), datetime.now(tz).isoformat()))
     
     conn.commit()
-    safe_sync(conn)
     conn.close()
     
     return holding
@@ -292,7 +262,6 @@ def clear_all_data():
     cursor.execute('DELETE FROM holdings')
     cursor.execute('DELETE FROM transactions')
     conn.commit()
-    safe_sync(conn)
     conn.close()
 
 # Initialize database on module load

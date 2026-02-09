@@ -11,3 +11,10 @@ __pycache__/
 
 # Data (optional - remove if you want to persist portfolio)
 # portfolio.json
+
+# Database files (local development only)
+*.db
+*.db-shm
+*.db-wal
+*.db-info
+*.db-journal
