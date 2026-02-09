@@ -127,11 +127,12 @@ def record_hourly_price():
     except Exception as e:
         print(f"❌ Price recording error: {e}")
 
-# Schedule hourly price check (at minute 0 of every hour: 9:00, 10:00, 11:00, etc.)
+# Schedule hourly price check (at 1 minute past every hour: 9:01:00, 10:01:00, 11:01:00, etc.)
 scheduler.add_job(
     func=record_hourly_price,
     trigger="cron",
-    minute=0,  # Run at xx:00
+    minute=1,  # Run at XX:01:00
+    second=0,  # Precisely at 0 seconds
     id="hourly_price_check",
     replace_existing=True
 )
