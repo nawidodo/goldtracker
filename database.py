@@ -76,43 +76,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-def migrate_from_json(json_file='portfolio.json'):
-    """Migrate existing JSON data to database"""
-    if not os.path.exists(json_file):
-        return False
-    
-    try:
-        with open(json_file, 'r') as f:
-            data = json.load(f)
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Migrate holdings
-        for h in data.get('holdings', []):
-            cursor.execute('''
-                INSERT OR REPLACE INTO holdings (id, weight, purchase_price, purchase_date, notes, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (h['id'], h['weight'], h['purchase_price'], h['purchase_date'], 
-                  h.get('notes', ''), h.get('created_at', datetime.now(ZoneInfo("Asia/Jakarta")).isoformat())))
-        
-        # Migrate transactions
-        for t in data.get('transactions', []):
-            cursor.execute('''
-                INSERT INTO transactions (type, holding_id, weight, price, date, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (t['type'], t['holding_id'], t['weight'], t['price'], t['date'], t['timestamp']))
-        
-        conn.commit()
-        conn.close()
-        
-        # Rename old JSON file as backup
-        os.rename(json_file, json_file + '.backup')
-        return True
-    except Exception as e:
-        print(f"Migration error: {e}")
-        return False
-
 def _row_to_dict(row, columns):
     """Convert a database row to dictionary"""
     if row is None:

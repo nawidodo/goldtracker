@@ -19,10 +19,6 @@ import database as db
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-# Try to migrate from JSON if it exists
-if os.path.exists('portfolio.json'):
-    db.migrate_from_json('portfolio.json')
-
 def clean_price(price_str):
     """Clean price string like 'Rp1.041.000' -> Decimal('1041000')"""
     price_str = price_str.replace("Rp", "").replace(".", "").replace(",", "").strip()
