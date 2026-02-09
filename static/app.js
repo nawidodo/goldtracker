@@ -468,6 +468,122 @@ elements.removeFile.addEventListener('click', resetImportForm);
 elements.submitImportBtn.addEventListener('click', handleImport);
 elements.importModalOverlay.addEventListener('click', (e) => { if (e.target === elements.importModalOverlay) closeImportModal(); });
 
+// ======= PRICE HISTORY FUNCTIONALITY =======
+
+// Load price history from API
+async function loadPriceHistory(days = 7) {
+    const historyList = document.getElementById('historyList');
+
+    try {
+        historyList.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading price history...</p></div>';
+
+        const response = await fetch(`${API_BASE}/api/price-history?days=${days}`);
+        const result = await response.json();
+
+        if (result.success) {
+            renderPriceHistory(result.data);
+        } else {
+            historyList.innerHTML = '<div class="empty-state"><span class="empty-icon">❌</span><p>Failed to load price history</p></div>';
+        }
+    } catch (error) {
+        console.error('Failed to load price history:', error);
+        historyList.innerHTML = '<div class="empty-state"><span class="empty-icon">❌</span><p>Network error</p></div>';
+    }
+}
+
+// Render price history table
+function renderPriceHistory(history) {
+    const historyList = document.getElementById('historyList');
+
+    if (!history || history.length === 0) {
+        historyList.innerHTML = `
+            <div class="empty-state">
+                <span class="empty-icon">📊</span>
+                <p>No price history yet</p>
+                <span class="empty-hint">Prices are recorded hourly. Check back soon!</span>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="history-table-wrapper">
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Sell Price</th>
+                        <th>Buy Price</th>
+                        <th>Change</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    for (let i = 0; i < history.length; i++) {
+        const item = history[i];
+        const date = new Date(item.timestamp);
+        const formatted = date.toLocaleString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        // Calculate change from previous entry
+        let changeHtml = '<span class="neutral">-</span>';
+        if (i > 0) {
+            const prev = history[i - 1];
+            const change = item.buy_price - prev.buy_price;
+            const changePct = ((change / prev.buy_price) * 100).toFixed(2);
+
+            if (change > 0) {
+                changeHtml = `<span class="positive">+${formatRupiah(change)} (+${changePct}%)</span>`;
+            } else if (change < 0) {
+                changeHtml = `<span class="negative">${formatRupiah(change)} (${changePct}%)</span>`;
+            } else {
+                changeHtml = '<span class="neutral">No change</span>';
+            }
+        }
+
+        html += `
+            <tr>
+                <td>${formatted}</td>
+                <td>${formatRupiah(item.sell_price)}</td>
+                <td>${formatRupiah(item.buy_price)}</td>
+                <td>${changeHtml}</td>
+            </tr>
+        `;
+    }
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    historyList.innerHTML = html;
+}
+
+// Price history filter event listeners
+document.querySelectorAll('input[name="days"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        loadPriceHistory(parseInt(e.target.value));
+    });
+});
+
+// Load price history when history tab is clicked
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    if (btn.dataset.tab === 'history') {
+        btn.addEventListener('click', () => {
+            // Load with default 7 days filter
+            const selectedFilter = document.querySelector('input[name="days"]:checked');
+            loadPriceHistory(parseInt(selectedFilter.value));
+        });
+    }
+});
+
 // Initial load
 fetchPrices();
 fetchPortfolio();

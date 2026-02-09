@@ -127,12 +127,31 @@
                 </div>
             </div>
 
-            <!-- History Tab -->
+            <!-- Price History Tab -->
             <div class="tab-content" id="history-tab">
-                <div class="history-list" id="historyList">
-                    <div class="empty-state">
-                        <span class="empty-icon">📜</span>
-                        <p>No transactions yet</p>
+                <div class="price-history-container">
+                    <div class="history-header">
+                        <h2 class="history-title">📊 1g Gold Price History</h2>
+                        <div class="history-controls">
+                            <label class="radio-label">
+                                <input type="radio" name="days" value="7" checked>
+                                <span>7 days</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="days" value="30">
+                                <span>30 days</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="days" value="90">
+                                <span>90 days</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="history-list" id="historyList">
+                        <div class="loading-state">
+                            <div class="spinner"></div>
+                            <p>Loading price history...</p>
+                        </div>
                     </div>
                 </div>
             </div>

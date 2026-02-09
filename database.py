@@ -73,6 +73,25 @@ def init_db():
         )
     ''')
     
+    # Price history table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS price_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            weight REAL NOT NULL DEFAULT 1.0,
+            sell_price REAL NOT NULL,
+            buy_price REAL NOT NULL,
+            timestamp TEXT NOT NULL,
+            UNIQUE(weight, sell_price, buy_price, timestamp)
+        )
+    ''')
+    
+    # Index for faster queries
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_price_history_timestamp 
+        ON price_history(timestamp DESC)
+    ''')
+    
+    
     conn.commit()
     conn.close()
 
@@ -217,6 +236,58 @@ def export_to_csv():
         writer.writerow([row['purchase_date'], row['weight'], 1, row['purchase_price'], row['notes']])
     
     return output.getvalue()
+
+def save_price_history(weight, sell_price, buy_price):
+    """Save price to history if it changed from the last recorded price"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Check if this exact price already exists (most recent entry)
+    cursor.execute('''
+        SELECT id FROM price_history 
+        WHERE weight = ? AND sell_price = ? AND buy_price = ?
+        ORDER BY timestamp DESC LIMIT 1
+    ''', (weight, sell_price, buy_price))
+    
+    if cursor.fetchone():
+        conn.close()
+        return False  # Price unchanged, don't save duplicate
+    
+    # Save new price
+    tz = ZoneInfo("Asia/Jakarta")
+    timestamp = datetime.now(tz).isoformat()
+    
+    cursor.execute('''
+        INSERT INTO price_history (weight, sell_price, buy_price, timestamp)
+        VALUES (?, ?, ?, ?)
+    ''', (weight, sell_price, buy_price, timestamp))
+    
+    conn.commit()
+    conn.close()
+    return True  # New price recorded
+
+def get_price_history(weight=1.0, days=30):
+    """Get price history for a specific weight (default 1 gram, last N days)"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Calculate date threshold
+    from datetime import timedelta
+    tz = ZoneInfo("Asia/Jakarta")
+    threshold = (datetime.now(tz) - timedelta(days=days)).isoformat()
+    
+    cursor.execute('''
+        SELECT weight, sell_price, buy_price, timestamp
+        FROM price_history
+        WHERE weight = ? AND timestamp >= ?
+        ORDER BY timestamp ASC
+    ''', (weight, threshold))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [_row_to_dict(row, ['weight', 'sell_price', 'buy_price', 'timestamp']) 
+            for row in rows]
 
 def clear_all_data():
     """Clear all data from database"""
