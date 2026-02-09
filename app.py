@@ -21,48 +21,6 @@ import atexit
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-# Initialize background scheduler for hourly price tracking
-scheduler = BackgroundScheduler(timezone="Asia/Jakarta")
-
-def record_hourly_price():
-    """Background job: Fetch and record 1 gram gold price if changed"""
-    try:
-        prices = get_gold_prices()
-        if prices and prices.get("success"):
-            data = prices.get("data", {})
-            # Get 1 gram price (try both "1.0" and "1" keys)
-            one_gram = data.get("1.0") or data.get("1")
-            if one_gram:
-                changed = db.save_price_history(
-                    weight=1.0,
-                    sell_price=one_gram["sell"],
-                    buy_price=one_gram["buy"]
-                )
-                if changed:
-                    print(f"✅ Price updated at {datetime.now(ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d %H:%M:%S')}: Sell={one_gram['sell']}, Buy={one_gram['buy']}")
-                else:
-                    print(f"ℹ️  Price unchanged at {datetime.now(ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d %H:%M:%S')}")
-    except Exception as e:
-        print(f"❌ Price recording error: {e}")
-
-# Schedule hourly price check (at minute 0 of every hour: 9:00, 10:00, 11:00, etc.)
-scheduler.add_job(
-    func=record_hourly_price,
-    trigger="cron",
-    minute=0,  # Run at xx:00
-    id="hourly_price_check",
-    replace_existing=True
-)
-
-# Start scheduler
-scheduler.start()
-
-# Shutdown scheduler gracefully on app exit
-atexit.register(lambda: scheduler.shutdown())
-
-# Record price immediately on startup
-record_hourly_price()
-
 
 def clean_price(price_str):
     """Clean price string like 'Rp1.041.000' -> Decimal('1041000')"""
@@ -143,6 +101,49 @@ def save_portfolio(portfolio):
     """Save portfolio - now handled by database module"""
     # This is now handled by individual save operations
     pass
+
+# ============ SCHEDULER SETUP ============
+# Initialize background scheduler for hourly price tracking
+scheduler = BackgroundScheduler(timezone="Asia/Jakarta")
+
+def record_hourly_price():
+    """Background job: Fetch and record 1 gram gold price if changed"""
+    try:
+        prices = get_gold_prices()
+        if prices and prices.get("success"):
+            data = prices.get("data", {})
+            # Get 1 gram price (try both "1.0" and "1" keys)
+            one_gram = data.get("1.0") or data.get("1")
+            if one_gram:
+                changed = db.save_price_history(
+                    weight=1.0,
+                    sell_price=one_gram["sell"],
+                    buy_price=one_gram["buy"]
+                )
+                if changed:
+                    print(f"✅ Price updated at {datetime.now(ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d %H:%M:%S')}: Sell={one_gram['sell']}, Buy={one_gram['buy']}")
+                else:
+                    print(f"ℹ️  Price unchanged at {datetime.now(ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d %H:%M:%S')}")
+    except Exception as e:
+        print(f"❌ Price recording error: {e}")
+
+# Schedule hourly price check (at minute 0 of every hour: 9:00, 10:00, 11:00, etc.)
+scheduler.add_job(
+    func=record_hourly_price,
+    trigger="cron",
+    minute=0,  # Run at xx:00
+    id="hourly_price_check",
+    replace_existing=True
+)
+
+# Start scheduler
+scheduler.start()
+
+# Shutdown scheduler gracefully on app exit
+atexit.register(lambda: scheduler.shutdown())
+
+# Record price immediately on startup
+record_hourly_price()
 
 # ============== API ROUTES ==============
 
