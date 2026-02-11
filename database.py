@@ -35,9 +35,12 @@ def get_db():
             auth_token=TURSO_AUTH_TOKEN
         )
     else:
-        # Local SQLite for development (when Turso env vars not set)
-        # timeout=30 allows waiting up to 30s if another process holds the lock
-        conn = libsql.connect(LOCAL_DATABASE_FILE, timeout=30)
+        # Local SQLite fallback
+        if USING_LIBSQL:
+            conn = libsql.connect(LOCAL_DATABASE_FILE)
+        else:
+            # timeout=30 allows waiting up to 30s if another process holds the lock
+            conn = libsql.connect(LOCAL_DATABASE_FILE, timeout=30)
     
     # Enable row factory for dict-like access
     if hasattr(conn, 'row_factory'):
