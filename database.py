@@ -5,6 +5,7 @@ Supports both local SQLite and Turso cloud database
 
 import os
 import json
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -35,7 +36,8 @@ def get_db():
         )
     else:
         # Local SQLite for development (when Turso env vars not set)
-        conn = libsql.connect(LOCAL_DATABASE_FILE)
+        # timeout=30 allows waiting up to 30s if another process holds the lock
+        conn = libsql.connect(LOCAL_DATABASE_FILE, timeout=30)
     
     # Enable row factory for dict-like access
     if hasattr(conn, 'row_factory'):
@@ -298,5 +300,13 @@ def clear_all_data():
     conn.commit()
     conn.close()
 
-# Initialize database on module load
-init_db()
+# Initialize database on module load (with retry for concurrent worker startup)
+for _attempt in range(5):
+    try:
+        init_db()
+        break
+    except Exception as e:
+        if 'locked' in str(e).lower() and _attempt < 4:
+            time.sleep(1 + _attempt)  # backoff: 1s, 2s, 3s, 4s
+        else:
+            raise
