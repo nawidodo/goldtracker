@@ -137,6 +137,20 @@ scheduler.add_job(
     replace_existing=True
 )
 
+# Run an explicit daily market refresh at 11:00 WIB (UTC+7).
+scheduler.add_job(
+    func=record_hourly_price,
+    trigger="cron",
+    hour=11,
+    minute=0,
+    second=0,
+    id="daily_1100_wib_price_refresh",
+    replace_existing=True,
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=3600
+)
+
 # Start scheduler
 scheduler.start()
 
