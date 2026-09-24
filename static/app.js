@@ -13,9 +13,14 @@ const elements = {
     totalChange: document.getElementById('totalChange'),
     totalWeight: document.getElementById('totalWeight'),
     totalCost: document.getElementById('totalCost'),
+    totalPositions: document.getElementById('totalPositions'),
+    averageCost: document.getElementById('averageCost'),
+    holdingCount: document.getElementById('holdingCount'),
     holdingsList: document.getElementById('holdingsList'),
+    allocationList: document.getElementById('allocationList'),
+    transactionList: document.getElementById('transactionList'),
     pricesList: document.getElementById('pricesList'),
-    historyList: document.getElementById('historyList'),
+    priceHistoryList: document.getElementById('priceHistoryList'),
     fabAdd: document.getElementById('fabAdd'),
     modalOverlay: document.getElementById('modalOverlay'),
     modalTitle: document.getElementById('modalTitle'),
@@ -59,7 +64,7 @@ function formatRupiah(amount) {
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<span>${type === 'success' ? '✅' : '❌'}</span> ${message}`;
+    toast.textContent = message;
     elements.toastContainer.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 }
@@ -67,10 +72,17 @@ function showToast(message, type = 'success') {
 // Tab navigation
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`${btn.dataset.tab}-tab`).classList.add('active');
+        document.querySelectorAll('.tab-btn').forEach(tabButton => {
+            const isActive = tabButton === btn;
+            tabButton.classList.toggle('active', isActive);
+            tabButton.setAttribute('aria-selected', String(isActive));
+            tabButton.tabIndex = isActive ? 0 : -1;
+        });
+        document.querySelectorAll('.tab-content').forEach(content => {
+            const isActive = content.id === `${btn.dataset.tab}-tab`;
+            content.classList.toggle('active', isActive);
+            content.setAttribute('aria-hidden', String(!isActive));
+        });
     });
 });
 
@@ -96,18 +108,23 @@ async function fetchPrices() {
 // Render prices list
 function renderPrices(prices) {
     const sortedPrices = Object.values(prices).sort((a, b) => a.weight - b.weight);
+    if (sortedPrices.length === 0) {
+        elements.pricesList.innerHTML = '<div class="empty-state"><p>No current prices available</p><span class="empty-hint">Use refresh to request a new quote.</span></div>';
+        return;
+    }
+
     elements.pricesList.innerHTML = sortedPrices.map(p => `
-        <div class="price-card">
-            <div class="price-weight">${p.weight} gr</div>
-            <div class="price-value sell">
+        <div class="price-card" role="row">
+            <div class="price-weight" role="cell">${p.weight} gr</div>
+            <div class="price-value sell" role="cell">
                 <span class="label">Sell</span>
                 <span class="amount">${formatRupiah(p.sell)}</span>
             </div>
-            <div class="price-value buy">
+            <div class="price-value buy" role="cell">
                 <span class="label">Buyback</span>
                 <span class="amount">${formatRupiah(p.buy)}</span>
             </div>
-            <div class="price-spread">${p.spread_pct}%</div>
+            <div class="price-spread" role="cell" aria-label="Spread ${p.spread_pct} percent">${p.spread_pct}%</div>
         </div>
     `).join('');
 }
@@ -133,6 +150,8 @@ function renderSummary(summary) {
     elements.totalValue.textContent = formatRupiah(summary.total_current_value);
     elements.totalWeight.textContent = `${summary.total_weight} gr`;
     elements.totalCost.textContent = formatRupiah(summary.total_cost);
+    elements.totalPositions.textContent = `${portfolioData.holdings.length} ${portfolioData.holdings.length === 1 ? 'lot' : 'lots'}`;
+    elements.averageCost.textContent = formatRupiah(summary.total_weight > 0 ? summary.total_cost / summary.total_weight : 0);
 
     const changeEl = elements.totalChange;
     const isPositive = summary.total_profit_loss >= 0;
@@ -143,80 +162,113 @@ function renderSummary(summary) {
     `;
 }
 
-// Render holdings list
+// Render holdings and weight-based allocation
 function renderHoldings(holdings) {
-    if (!holdings || holdings.length === 0) {
+    elements.holdingCount.textContent = `${String(holdings.length).padStart(2, '0')} ${holdings.length === 1 ? 'entry' : 'entries'}`;
+
+    if (holdings.length === 0) {
         elements.holdingsList.innerHTML = `
             <div class="empty-state">
-                <span class="empty-icon">🪙</span>
                 <p>No gold holdings yet</p>
-                <span class="empty-hint">Tap + to add your first gold</span>
+                <span class="empty-hint">Use Add to open the first position.</span>
             </div>
         `;
+        renderAllocation([]);
         return;
     }
 
     elements.holdingsList.innerHTML = holdings.map(h => {
         const isPositive = h.profit_loss >= 0;
         return `
-        <div class="holding-card" data-id="${h.id}">
-            <div class="holding-header">
+        <article class="holding-card" data-id="${h.id}" role="row">
+            <div class="holding-header" role="cell">
                 <span class="holding-weight">${h.weight} gram</span>
                 <span class="holding-badge">${h.notes || 'Gold'}</span>
             </div>
             <div class="holding-details">
-                <div class="holding-detail">
+                <div class="holding-detail" role="cell">
                     <span class="label">Cost</span>
                     <span class="value">${formatRupiah(h.purchase_price)}</span>
                 </div>
-                <div class="holding-detail">
-                    <span class="label">Current Value</span>
+                <div class="holding-detail" role="cell">
+                    <span class="label">Current</span>
                     <span class="value">${formatRupiah(h.current_buy)}</span>
                 </div>
-                <div class="holding-detail">
-                    <span class="label">Profit/Loss</span>
+                <div class="holding-detail" role="cell">
+                    <span class="label">P/L</span>
                     <span class="value ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatRupiah(h.profit_loss)}</span>
                 </div>
-                <div class="holding-detail">
+                <div class="holding-detail" role="cell">
                     <span class="label">Return</span>
                     <span class="value ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${h.profit_loss_pct}%</span>
                 </div>
             </div>
-            <div class="holding-actions">
-                <button class="holding-action-btn edit" onclick="editHolding('${h.id}')">Edit</button>
-                <button class="holding-action-btn delete" onclick="deleteHolding('${h.id}')">Delete</button>
-                <button class="holding-action-btn sell" onclick="openSellModal('${h.id}')">Sell</button>
+            <div class="holding-actions" role="cell">
+                <button class="holding-action-btn edit" type="button" onclick="editHolding('${h.id}')">Edit</button>
+                <button class="holding-action-btn delete" type="button" onclick="deleteHolding('${h.id}')">Delete</button>
+                <button class="holding-action-btn sell" type="button" onclick="openSellModal('${h.id}')">Sell</button>
             </div>
-        </div>
+        </article>
         `;
     }).join('');
+
+    renderAllocation(holdings);
 }
 
-// Render history
+function renderAllocation(holdings) {
+    const totalWeight = holdings.reduce((sum, holding) => sum + Number(holding.weight), 0);
+    if (totalWeight <= 0) {
+        elements.allocationList.innerHTML = '<div class="empty-inline">No allocation data</div>';
+        return;
+    }
+
+    const allocations = holdings
+        .map(holding => ({
+            id: holding.id,
+            label: holding.notes || `Position ${holding.id}`,
+            weight: Number(holding.weight),
+            percentage: Number(holding.weight) / totalWeight * 100
+        }))
+        .sort((a, b) => b.weight - a.weight);
+
+    elements.allocationList.innerHTML = allocations.map(item => `
+        <div class="allocation-item">
+            <div class="allocation-meta">
+                <strong>${item.label}</strong>
+                <span>${item.percentage.toFixed(1)}%</span>
+            </div>
+            <div class="allocation-bar" aria-hidden="true">
+                <span style="width: ${item.percentage}%"></span>
+            </div>
+            <div class="allocation-bar-labels"><span>${item.weight} gr</span><span>WEIGHT</span></div>
+        </div>
+    `).join('');
+}
+
+// Render portfolio transactions separately from market price history
 function renderHistory(transactions) {
     if (!transactions || transactions.length === 0) {
-        elements.historyList.innerHTML = `
-            <div class="empty-state">
-                <span class="empty-icon">📜</span>
-                <p>No transactions yet</p>
-            </div>
-        `;
+        elements.transactionList.innerHTML = '<div class="empty-inline">No activity yet</div>';
         return;
     }
 
     const sorted = [...transactions].reverse();
-    elements.historyList.innerHTML = sorted.map(t => `
-        <div class="history-card">
-            <div class="history-icon ${t.type.toLowerCase()}">${t.type === 'BUY' ? '📥' : '📤'}</div>
-            <div class="history-details">
-                <div class="history-title">${t.type === 'BUY' ? 'Bought' : 'Sold'} ${t.weight}g Gold</div>
-                <div class="history-subtitle">${t.date}</div>
+    elements.transactionList.innerHTML = sorted.map(t => {
+        const isBuy = t.type === 'BUY';
+        return `
+        <div class="transaction-card ${isBuy ? 'buy' : 'sell'}">
+            <div class="transaction-mark" aria-hidden="true">${isBuy ? 'IN' : 'OUT'}</div>
+            <div class="transaction-details">
+                <strong>${isBuy ? 'Bought' : 'Sold'} ${t.weight}g gold</strong>
+                <span>${t.date}</span>
             </div>
-            <div class="history-amount ${t.type.toLowerCase()}">
-                <div class="price">${t.type === 'BUY' ? '-' : '+'}${formatRupiah(t.price)}</div>
+            <div class="transaction-amount">
+                <strong>${isBuy ? '−' : '+'}${formatRupiah(t.price)}</strong>
+                <span>${t.type}</span>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // Modal handlers
@@ -463,6 +515,12 @@ elements.fabImport.addEventListener('click', openImportModal);
 elements.importModalClose.addEventListener('click', closeImportModal);
 elements.cancelImportBtn.addEventListener('click', closeImportModal);
 elements.fileUploadArea.addEventListener('click', () => elements.importFile.click());
+elements.fileUploadArea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        elements.importFile.click();
+    }
+});
 elements.importFile.addEventListener('change', handleFileSelect);
 elements.removeFile.addEventListener('click', resetImportForm);
 elements.submitImportBtn.addEventListener('click', handleImport);
@@ -472,10 +530,10 @@ elements.importModalOverlay.addEventListener('click', (e) => { if (e.target === 
 
 // Load price history from API
 async function loadPriceHistory(days = 7) {
-    const historyList = document.getElementById('historyList');
+    const historyList = elements.priceHistoryList;
 
     try {
-        historyList.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading price history...</p></div>';
+        historyList.innerHTML = '<div class="loading-state"><div class="spinner" aria-hidden="true"></div><p>Loading price history…</p></div>';
 
         const response = await fetch(`${API_BASE}/api/price-history?days=${days}`);
         const result = await response.json();
@@ -483,24 +541,23 @@ async function loadPriceHistory(days = 7) {
         if (result.success) {
             renderPriceHistory(result.data);
         } else {
-            historyList.innerHTML = '<div class="empty-state"><span class="empty-icon">❌</span><p>Failed to load price history</p></div>';
+            historyList.innerHTML = '<div class="empty-state"><p>Failed to load price history</p></div>';
         }
     } catch (error) {
         console.error('Failed to load price history:', error);
-        historyList.innerHTML = '<div class="empty-state"><span class="empty-icon">❌</span><p>Network error</p></div>';
+        historyList.innerHTML = '<div class="empty-state"><p>Network error</p></div>';
     }
 }
 
 // Render price history table
 function renderPriceHistory(history) {
-    const historyList = document.getElementById('historyList');
+    const historyList = elements.priceHistoryList;
 
     if (!history || history.length === 0) {
         historyList.innerHTML = `
             <div class="empty-state">
-                <span class="empty-icon">📊</span>
                 <p>No price history yet</p>
-                <span class="empty-hint">Prices are recorded hourly. Check back soon!</span>
+                <span class="empty-hint">Prices are recorded hourly. Check back soon.</span>
             </div>
         `;
         return;

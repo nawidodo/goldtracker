@@ -3,8 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#1a1a2e">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1d1c19">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description"
@@ -12,176 +13,247 @@
 
     <title>Gold Portfolio Tracker</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-        rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css">
-
-    <!-- PWA Manifest -->
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" type="image/svg+xml"
-        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪙</text></svg>">
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='12' fill='%231d1c19'/><text x='50' y='65' fill='%23f2b84b' font-family='monospace' font-size='48' font-weight='700' text-anchor='middle'>Au</text></svg>">
 </head>
 
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div class="logo">
-                    <span class="logo-icon">🪙</span>
-                    <div class="logo-text">
-                        <h1>Gold Tracker</h1>
-                        <span class="subtitle">Portfolio Management</span>
-                    </div>
-                    <div class="header-actions">
-                        <button class="action-btn" id="exportBtn" title="Export CSV" onclick="exportPortfolio()">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
+    <a class="skip-link" href="#workspace">Skip to portfolio</a>
+
+    <div class="app-shell">
+        <header class="command-bar">
+            <div class="command-inner">
+                <a class="brand" href="#workspace" aria-label="Gold Tracker portfolio home">
+                    <span class="brand-mark" aria-hidden="true">Au</span>
+                    <span class="brand-copy">
+                        <strong>Gold Ledger</strong>
+                        <span class="sync-state">Sync <span id="lastUpdate" role="status" aria-live="polite">Connecting…</span></span>
+                    </span>
+                </a>
+
+                <nav class="tab-nav" aria-label="Portfolio views" role="tablist">
+                    <button class="tab-btn active" id="holdingsTabBtn" type="button" role="tab"
+                        aria-selected="true" aria-controls="holdings-tab" data-tab="holdings">Holdings</button>
+                    <button class="tab-btn" id="pricesTabBtn" type="button" role="tab" aria-selected="false"
+                        aria-controls="prices-tab" data-tab="prices" tabindex="-1">Prices</button>
+                    <button class="tab-btn" id="historyTabBtn" type="button" role="tab" aria-selected="false"
+                        aria-controls="history-tab" data-tab="history" tabindex="-1">History</button>
+                </nav>
+
+                <div class="command-actions">
+                    <div class="primary-commands" aria-label="Portfolio actions">
+                        <button class="command-btn add-command" id="fabAdd" type="button" title="Add Gold">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M12 5v14M5 12h14" />
                             </svg>
+                            <span>Add</span>
                         </button>
-                        <button class="action-btn" id="refreshBtn" title="Refresh Prices">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                <path d="M3 3v5h5" />
-                                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                                <path d="M16 16h5v5" />
+                        <button class="command-btn" id="fabImport" type="button" title="Import CSV or Excel">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" />
+                            </svg>
+                            <span>Import</span>
+                        </button>
+                    </div>
+
+                    <div class="utility-commands" aria-label="Portfolio utilities">
+                        <button class="command-btn" id="exportBtn" type="button" title="Export CSV"
+                            onclick="exportPortfolio()">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" />
+                            </svg>
+                            <span class="utility-label">Export</span>
+                        </button>
+                        <button class="command-btn icon-command" id="refreshBtn" type="button" title="Refresh prices"
+                            aria-label="Refresh prices and portfolio">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 11a8 8 0 1 0-2.34 5.66" />
+                                <path d="M20 5v6h-6" />
                             </svg>
                         </button>
                     </div>
                 </div>
-                <div class="last-update" id="lastUpdate">Loading prices...</div>
+            </div>
         </header>
 
-        <!-- Portfolio Summary Cards -->
-        <section class="summary-section">
-            <div class="summary-card main-card">
-                <div class="summary-label">Total Portfolio Value</div>
-                <div class="summary-value" id="totalValue">Rp 0</div>
-                <div class="summary-change" id="totalChange">
-                    <span class="change-value">+Rp 0</span>
-                    <span class="change-percent">(0%)</span>
-                </div>
-            </div>
-            <div class="summary-grid">
-                <div class="summary-card">
-                    <div class="summary-icon">⚖️</div>
-                    <div class="summary-details">
-                        <span class="summary-label">Total Weight</span>
-                        <span class="summary-value" id="totalWeight">0 gr</span>
+        <main class="workspace" id="workspace">
+            <section class="portfolio-summary" aria-labelledby="portfolioSummaryTitle">
+                <div class="summary-hero">
+                    <div class="hero-copy">
+                        <div class="eyebrow-row">
+                            <p class="eyebrow" id="portfolioSummaryTitle">Portfolio value</p>
+                            <span class="live-mark"><span aria-hidden="true"></span> Live basis</span>
+                        </div>
+                        <output class="hero-value" id="totalValue" aria-live="polite">Rp 0</output>
+                        <div class="summary-change" id="totalChange">
+                            <span class="change-value">+Rp 0</span>
+                            <span class="change-percent">(0%)</span>
+                        </div>
+                        <p class="hero-caption">Current buyback valuation across active gold positions.</p>
+                    </div>
+                    <div class="hero-gauge" aria-hidden="true">
+                        <span class="gauge-label">AU / IDR</span>
+                        <div class="gauge-bars">
+                            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                        </div>
+                        <span class="gauge-code">XAU · 24H</span>
                     </div>
                 </div>
-                <div class="summary-card">
-                    <div class="summary-icon">💰</div>
-                    <div class="summary-details">
-                        <span class="summary-label">Total Cost</span>
-                        <span class="summary-value" id="totalCost">Rp 0</span>
-                    </div>
+
+                <div class="metric-strip" aria-label="Portfolio metrics">
+                    <article class="metric-card">
+                        <span class="metric-label">Total weight</span>
+                        <strong class="metric-value" id="totalWeight">0 gr</strong>
+                        <span class="metric-code">PHYS / GRAM</span>
+                    </article>
+                    <article class="metric-card">
+                        <span class="metric-label">Cost basis</span>
+                        <strong class="metric-value" id="totalCost">Rp 0</strong>
+                        <span class="metric-code">ACQUISITION</span>
+                    </article>
+                    <article class="metric-card">
+                        <span class="metric-label">Positions</span>
+                        <strong class="metric-value" id="totalPositions">0 lots</strong>
+                        <span class="metric-code">ACTIVE LEDGER</span>
+                    </article>
+                    <article class="metric-card">
+                        <span class="metric-label">Average entry</span>
+                        <strong class="metric-value" id="averageCost">Rp 0</strong>
+                        <span class="metric-code">PER GRAM</span>
+                    </article>
+                </div>
+            </section>
+
+            <div class="tab-content active" id="holdings-tab" role="tabpanel" aria-labelledby="holdingsTabBtn">
+                <div class="holdings-workspace">
+                    <section class="panel ledger-panel" aria-labelledby="ledgerTitle">
+                        <header class="panel-header">
+                            <div>
+                                <p class="panel-kicker">01 / Positions</p>
+                                <h2 id="ledgerTitle">Holding ledger</h2>
+                            </div>
+                            <span class="panel-count" id="holdingCount">00 entries</span>
+                        </header>
+                        <div class="ledger-columns" aria-hidden="true">
+                            <span>Lot / weight</span>
+                            <span>Cost</span>
+                            <span>Current</span>
+                            <span>Return</span>
+                            <span>Control</span>
+                        </div>
+                        <div class="holdings-list" id="holdingsList" aria-live="polite">
+                            <div class="loading-state">
+                                <div class="spinner" aria-hidden="true"></div>
+                                <p>Reading position ledger…</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <aside class="side-rail" aria-label="Allocation and recent activity">
+                        <section class="panel allocation-panel" aria-labelledby="allocationTitle">
+                            <header class="panel-header compact-header">
+                                <div>
+                                    <p class="panel-kicker">02 / Exposure</p>
+                                    <h2 id="allocationTitle">Allocation</h2>
+                                </div>
+                                <span class="panel-code">BY WEIGHT</span>
+                            </header>
+                            <div class="allocation-list" id="allocationList">
+                                <div class="empty-inline">No allocation data</div>
+                            </div>
+                        </section>
+
+                        <section class="panel transactions-panel" aria-labelledby="transactionsTitle">
+                            <header class="panel-header compact-header">
+                                <div>
+                                    <p class="panel-kicker">03 / Ledger</p>
+                                    <h2 id="transactionsTitle">Recent activity</h2>
+                                </div>
+                                <span class="panel-code">LATEST</span>
+                            </header>
+                            <div class="transaction-list" id="transactionList" aria-live="polite">
+                                <div class="empty-inline">No activity yet</div>
+                            </div>
+                        </section>
+                    </aside>
                 </div>
             </div>
-        </section>
 
-        <!-- Tab Navigation -->
-        <nav class="tab-nav">
-            <button class="tab-btn active" data-tab="holdings">
-                <span class="tab-icon">📦</span>
-                <span class="tab-text">Holdings</span>
-            </button>
-            <button class="tab-btn" data-tab="prices">
-                <span class="tab-icon">📊</span>
-                <span class="tab-text">Prices</span>
-            </button>
-            <button class="tab-btn" data-tab="history">
-                <span class="tab-icon">📜</span>
-                <span class="tab-text">History</span>
-            </button>
-        </nav>
-
-        <!-- Tab Content -->
-        <main class="main-content">
-            <!-- Holdings Tab -->
-            <div class="tab-content active" id="holdings-tab">
-                <div class="holdings-list" id="holdingsList">
-                    <div class="empty-state">
-                        <span class="empty-icon">🪙</span>
-                        <p>No gold holdings yet</p>
-                        <span class="empty-hint">Tap + to add your first gold</span>
+            <div class="tab-content" id="prices-tab" role="tabpanel" aria-labelledby="pricesTabBtn" aria-hidden="true">
+                <section class="panel price-panel" aria-labelledby="pricesTitle">
+                    <header class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Market / 1 gram</p>
+                            <h2 id="pricesTitle">Current price board</h2>
+                        </div>
+                        <p class="panel-description">Retail sell, buyback, and market spread.</p>
+                    </header>
+                    <div class="price-columns" aria-hidden="true">
+                        <span>Weight</span>
+                        <span>Sell</span>
+                        <span>Buyback</span>
+                        <span>Spread</span>
                     </div>
-                </div>
+                    <div class="prices-list" id="pricesList" aria-live="polite">
+                        <div class="loading-state">
+                            <div class="spinner" aria-hidden="true"></div>
+                            <p>Loading current prices…</p>
+                        </div>
+                    </div>
+                </section>
             </div>
 
-            <!-- Prices Tab -->
-            <div class="tab-content" id="prices-tab">
-                <div class="prices-list" id="pricesList">
-                    <div class="loading-state">
-                        <div class="spinner"></div>
-                        <p>Loading prices...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Price History Tab -->
-            <div class="tab-content" id="history-tab">
-                <div class="price-history-container">
-                    <div class="history-header">
-                        <h2 class="history-title">📊 1g Gold Price History</h2>
-                        <div class="history-controls">
+            <div class="tab-content" id="history-tab" role="tabpanel" aria-labelledby="historyTabBtn" aria-hidden="true">
+                <section class="panel history-panel" aria-labelledby="historyTitle">
+                    <header class="panel-header history-header">
+                        <div>
+                            <p class="panel-kicker">Monitor / 1 gram</p>
+                            <h2 id="historyTitle">Price history log</h2>
+                        </div>
+                        <fieldset class="history-controls">
+                            <legend class="sr-only">History range</legend>
                             <label class="radio-label">
                                 <input type="radio" name="days" value="7" checked>
-                                <span>7 days</span>
+                                <span>7D</span>
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="days" value="30">
-                                <span>30 days</span>
+                                <span>30D</span>
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="days" value="90">
-                                <span>90 days</span>
+                                <span>90D</span>
                             </label>
-                        </div>
-                    </div>
+                        </fieldset>
+                    </header>
                     <div class="history-list" id="historyList">
-                        <div class="loading-state">
-                            <div class="spinner"></div>
-                            <p>Loading price history...</p>
+                        <div class="history-results" id="priceHistoryList" aria-live="polite">
+                            <div class="loading-state">
+                                <div class="spinner" aria-hidden="true"></div>
+                                <p>Loading price history…</p>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </main>
-
-        <!-- FAB Buttons -->
-        <button class="fab fab-secondary" id="fabImport" title="Import CSV/Excel">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-        </button>
-        <button class="fab" id="fabAdd" title="Add Gold">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-        </button>
     </div>
 
-    <!-- Add/Edit Modal -->
     <div class="modal-overlay" id="modalOverlay">
-        <div class="modal" id="addModal">
-            <div class="modal-header">
-                <h2 id="modalTitle">Add Gold</h2>
-                <button class="modal-close" id="modalClose">&times;</button>
-            </div>
+        <section class="modal" id="addModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+            <header class="modal-header">
+                <div>
+                    <p class="panel-kicker">Ledger / Position</p>
+                    <h2 id="modalTitle">Add Gold</h2>
+                </div>
+                <button class="modal-close" id="modalClose" type="button" aria-label="Close add or edit holding dialog">&times;</button>
+            </header>
             <form class="modal-form" id="holdingForm">
                 <input type="hidden" id="holdingId">
 
@@ -206,7 +278,7 @@
                 <div class="form-group">
                     <label for="purchasePrice">Purchase Price (Rp)</label>
                     <input type="number" id="purchasePrice" required placeholder="e.g., 1500000">
-                    <div class="price-suggestion" id="priceSuggestion"></div>
+                    <div class="price-suggestion" id="priceSuggestion" aria-live="polite"></div>
                 </div>
 
                 <div class="form-group">
@@ -224,16 +296,18 @@
                     <button type="submit" class="btn btn-primary" id="submitBtn">Add Gold</button>
                 </div>
             </form>
-        </div>
+        </section>
     </div>
 
-    <!-- Sell Confirmation Modal -->
     <div class="modal-overlay" id="sellModalOverlay">
-        <div class="modal sell-modal" id="sellModal">
-            <div class="modal-header">
-                <h2>Sell Gold</h2>
-                <button class="modal-close" id="sellModalClose">&times;</button>
-            </div>
+        <section class="modal sell-modal" id="sellModal" role="dialog" aria-modal="true" aria-labelledby="sellModalTitle">
+            <header class="modal-header">
+                <div>
+                    <p class="panel-kicker">Ledger / Disposal</p>
+                    <h2 id="sellModalTitle">Sell Gold</h2>
+                </div>
+                <button class="modal-close" id="sellModalClose" type="button" aria-label="Close sell dialog">&times;</button>
+            </header>
             <div class="sell-info">
                 <p id="sellInfo"></p>
             </div>
@@ -248,44 +322,45 @@
                     <button type="submit" class="btn btn-danger">Confirm Sell</button>
                 </div>
             </form>
-        </div>
+        </section>
     </div>
 
-    <!-- Toast Container -->
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="toast-container" id="toastContainer" role="region" aria-label="Notifications" aria-live="polite"></div>
 
-    <!-- Import Modal -->
     <div class="modal-overlay" id="importModalOverlay">
-        <div class="modal import-modal" id="importModal">
-            <div class="modal-header">
-                <h2>Import Data</h2>
-                <button class="modal-close" id="importModalClose">&times;</button>
-            </div>
+        <section class="modal import-modal" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+            <header class="modal-header">
+                <div>
+                    <p class="panel-kicker">Data / Intake</p>
+                    <h2 id="importModalTitle">Import Data</h2>
+                </div>
+                <button class="modal-close" id="importModalClose" type="button" aria-label="Close import dialog">&times;</button>
+            </header>
             <div class="modal-form">
                 <div class="import-info">
-                    <p>📁 Upload your CSV or Excel file with gold holdings data.</p>
-                    <p class="import-hint">Required columns: <strong>weight</strong> (or berat/gram),
-                        <strong>price</strong> (or harga)
-                    </p>
-                    <p class="import-hint">Optional: <strong>date</strong> (tanggal), <strong>notes</strong> (catatan)
-                    </p>
+                    <p>Upload a CSV or Excel file containing gold holdings.</p>
+                    <p class="import-hint">Required: <strong>weight</strong> (or berat/gram), <strong>price</strong> (or harga)</p>
+                    <p class="import-hint">Optional: <strong>date</strong> (tanggal), <strong>notes</strong> (catatan)</p>
                 </div>
-                <div class="file-upload-area" id="fileUploadArea">
+                <div class="file-upload-area" id="fileUploadArea" role="button" tabindex="0" aria-label="Choose CSV or Excel file">
                     <input type="file" id="importFile" accept=".csv,.xlsx,.xls" hidden>
-                    <span class="upload-icon">📄</span>
-                    <p>Tap to select file</p>
-                    <span class="file-types">CSV, Excel (.xlsx)</span>
+                    <svg class="upload-icon" aria-hidden="true" viewBox="0 0 24 24" width="30" height="30" fill="none"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 16V4m0 0 4 4m-4-4L8 8M5 14v5h14v-5" />
+                    </svg>
+                    <p>Select a data file</p>
+                    <span class="file-types">CSV or Excel (.xlsx)</span>
                 </div>
                 <div class="selected-file" id="selectedFile" style="display:none;">
                     <span class="file-name" id="fileName"></span>
-                    <button class="remove-file" id="removeFile">✕</button>
+                    <button class="remove-file" id="removeFile" type="button" aria-label="Remove selected file">&times;</button>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" id="cancelImportBtn">Cancel</button>
                     <button type="button" class="btn btn-primary" id="submitImportBtn" disabled>Import</button>
                 </div>
             </div>
-        </div>
+        </section>
     </div>
 
     <script src="/static/app.js"></script>
