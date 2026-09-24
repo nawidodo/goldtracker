@@ -1681,7 +1681,9 @@
         }
 
         .hero-value {
-            font-size: clamp(2rem, 10.4vw, 3.25rem);
+            font-size: clamp(1.85rem, 8.5vw, 2.4rem);
+            letter-spacing: -0.06em;
+            white-space: nowrap;
         }
 
         .hero-caption {
