@@ -107,7 +107,7 @@ def save_portfolio(portfolio):
 scheduler = BackgroundScheduler(timezone="Asia/Jakarta")
 
 def record_hourly_price():
-    """Background job: Fetch and record 1 gram gold price if changed"""
+    """Background job: fetch and record a 1g price snapshot."""
     try:
         prices = get_gold_prices()
         if prices and prices.get("success"):
@@ -118,12 +118,13 @@ def record_hourly_price():
                 changed = db.save_price_history(
                     weight=1.0,
                     sell_price=one_gram["sell"],
-                    buy_price=one_gram["buy"]
+                    buy_price=one_gram["buy"],
+                    force=True,
                 )
                 if changed:
-                    print(f"✅ Price updated at {datetime.now(ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d %H:%M:%S')}: Sell={one_gram['sell']}, Buy={one_gram['buy']}")
+                    print(f"📸 Price snapshot recorded at {datetime.now(ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d %H:%M:%S')}: Sell={one_gram['sell']}, Buy={one_gram['buy']}")
                 else:
-                    print(f"ℹ️  Price unchanged at {datetime.now(ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"ℹ️  Price snapshot skipped at {datetime.now(ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d %H:%M:%S')}")
     except Exception as e:
         print(f"❌ Price recording error: {e}")
 

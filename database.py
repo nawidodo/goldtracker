@@ -242,21 +242,21 @@ def export_to_csv():
     
     return output.getvalue()
 
-def save_price_history(weight, sell_price, buy_price):
-    """Save price to history if it changed from the last recorded price"""
+def save_price_history(weight, sell_price, buy_price, force=False):
+    """Save a price snapshot, optionally skipping unchanged prices."""
     conn = get_db()
     cursor = conn.cursor()
-    
-    # Check if this exact price already exists (most recent entry)
-    cursor.execute('''
-        SELECT id FROM price_history 
-        WHERE weight = ? AND sell_price = ? AND buy_price = ?
-        ORDER BY timestamp DESC LIMIT 1
-    ''', (weight, sell_price, buy_price))
-    
-    if cursor.fetchone():
-        conn.close()
-        return False  # Price unchanged, don't save duplicate
+
+    if not force:
+        cursor.execute('''
+            SELECT id FROM price_history
+            WHERE weight = ? AND sell_price = ? AND buy_price = ?
+            ORDER BY timestamp DESC LIMIT 1
+        ''', (weight, sell_price, buy_price))
+
+        if cursor.fetchone():
+            conn.close()
+            return False  # Price unchanged, don't save duplicate
     
     # Save new price
     tz = ZoneInfo("Asia/Jakarta")
